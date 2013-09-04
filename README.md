@@ -3,7 +3,19 @@
 Haskell implementation of a (currently) very small subset of the [PHP-Smarty][1] template language.
 
 ## Usage
-`renderTemplate "test.tpl" $ HM.fromList [ ( T.pack "title", mkParam "SomeTitle"), (T.pack "list", mkParam ["a", "b"]) ]`
+```haskell
+{-# LANGUAGE OverloadedStrings #-}
+
+import Text.HSmarty
+
+import qualified Data.HashMap.Strict as HM
+import qualified Data.Text as T
+
+main =
+   renderTemplate "test.tpl" $ HM.fromList [ ( "title", mkParam ("SomeTitle" :: T.Text))
+                                           , ( "list", mkParam (["a", "b"] :: [T.Text]))
+                                           ]
+```
 
 ## Implemented features
 
