@@ -37,6 +37,11 @@ type Env = HM.HashMap T.Text TemplateVar
 type ParamMap = HM.HashMap T.Text TemplateParam
 type PropMap = HM.HashMap T.Text A.Value
 
+type EvalM a = ErrorT T.Text IO a
+
+instance Error T.Text where
+    strMsg = T.pack
+
 mkParam :: A.ToJSON a => a -> TemplateParam
 mkParam = TemplateParam . A.toJSON
 
@@ -181,11 +186,6 @@ mkForeachMap idx' size' =
       size = fromIntegral size'
       idx = fromIntegral idx'
 
-type EvalM a = ErrorT T.Text IO a
-
-instance Error T.Text where
-    strMsg = T.pack
-
 str :: T.Text -> A.Value -> EvalM T.Text
 str _ (A.String x) = return x
 str desc _ = throwError $ T.concat [ "`", desc, "` is not a string!" ]
@@ -216,7 +216,11 @@ evalFunCall env "include" args =
                                   return (k, val)
                           ) args
        filename <- lookupStr "include" "file" evaledArgs
-       content <- liftIO $ renderTemplate (T.unpack filename) HM.empty
+       let otherArgs = filter (\arg@(k, _) ->
+                                   not $ k `elem` [ "include" ]
+                              ) evaledArgs
+           asTplParams = HM.fromList $ map (\(k, v) -> (k, TemplateParam v)) otherArgs
+       content <- liftIO $ renderTemplate (T.unpack filename) asTplParams
        case content of
          Right c ->
              return $ A.String c
