@@ -12,8 +12,10 @@ import Text.HSmarty.Parser.Smarty
 import Control.Applicative
 import Control.Monad.Error
 import Data.Attoparsec.Text (Number(..))
+import Data.Char (ord)
 import Data.Maybe
 import Data.Vector ((!?))
+import Network.HTTP.Base (urlEncode)
 import qualified Data.Aeson as A
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
@@ -48,6 +50,29 @@ renderTemplate fp mp =
        tpl <- parseSmarty fp ct
        runErrorT $ evalTpl (mkEnv mp) tpl
 
+applyPrintDirective :: T.Text -> PrintDirective -> EvalM T.Text
+applyPrintDirective t "urlencode" =
+    return $ T.pack $ urlEncode $ T.unpack t
+applyPrintDirective t "nl2br" =
+    return $ T.replace "\n" "<br />" t
+applyPrintDirective t "escape" =
+    return $ T.pack $ htmlEscape $ T.unpack t
+    where
+      forbidden = "<&\">'/"
+      htmlEscape :: String -> String
+      htmlEscape [] = []
+      htmlEscape (x:xs) =
+          if x `elem` forbidden
+          then concat [ "&#" ++ show (ord x) ++ ";"
+                      , htmlEscape xs
+                      ]
+          else x : htmlEscape xs
+applyPrintDirective _ pd =
+    throwError $ T.concat [ "Unknown print directive `"
+                          , pd
+                          , "`"
+                          ]
+
 evalTpl :: Env -> Smarty -> EvalM T.Text
 evalTpl env (Smarty filename tpl) =
     evalBody env tpl
@@ -57,7 +82,7 @@ evalStmt _ (SmartyText t) = return t
 evalStmt _ (SmartyComment _) = return T.empty
 evalStmt env (SmartyPrint expr directives) =
     do t <- exprToText env expr
-       return t
+       foldM applyPrintDirective t directives
 evalStmt env (SmartyIf (If cases elseBody)) =
     do evaledCases <- mapM (\(cond, body) ->
                                 do r <- evalExpr env cond
@@ -87,16 +112,6 @@ evalStmt env (SmartyForeach (Foreach source mKey val body elseBody)) =
               Nothing -> return T.empty
        else do runs <- mapM (evalForeachBody env mKey val body) preparedSource
                return $ T.concat runs
-
-{-evalForeach :: Env ->
-
-{-Foreach
-   { f_source :: Expr
-   , f_key :: Maybe T.Text
-   , f_item :: T.Text
-   , f_body :: [SmartyStmt]
-   , f_else :: Maybe [SmartyStmt]
-   }-}-}
 
 evalBody :: Env -> [SmartyStmt] -> EvalM T.Text
 evalBody env stmt =

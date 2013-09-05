@@ -20,4 +20,5 @@ library
                      unordered-containers ==0.2.*,
                      aeson ==0.6.*,
                      attoparsec ==0.10.*,
-                     mtl ==2.1.*
+                     mtl ==2.1.*,
+                     HTTP
