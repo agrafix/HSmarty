@@ -1,5 +1,5 @@
 name:                HSmarty
-version:             0.1.0.0
+version:             0.1.1.0
 synopsis:            Haskell implementation of a subset of the PHP-Smarty template language
 -- description:         
 license:             BSD3
@@ -14,7 +14,8 @@ extra-source-files:  test.tpl
 
 Library
   exposed-modules:   Text.HSmarty
-  other-modules:     Text.HSmarty.Parser.Smarty
+  other-modules:     Text.HSmarty.Parser.Smarty, Text.HSmarty.Parser.Expr, Text.HSmarty.Parser.Util, 
+                     Text.HSmarty.Render.Engine, Text.HSmarty.Types
   build-depends:     base ==4.6.*,
                      vector ==0.10.*,
                      text ==0.11.*,
