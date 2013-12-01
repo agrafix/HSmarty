@@ -1,7 +1,8 @@
 name:                HSmarty
-version:             0.1.0.0
+version:             0.2.0.0
 synopsis:            Haskell implementation of a subset of the PHP-Smarty template language
--- description:         
+description:         This is an implementation of a subset of the PHP-Smarty template language. It provides a library
+                     for use within haskell, and a compiler to generate JavaScript-Code for client rendering.
 license:             BSD3
 license-file:        LICENSE
 author:              Alexander Thiemann <mail@agrafix.net>
@@ -25,7 +26,24 @@ Library
                      HTTP,
                      HTF
 
-Executable TestHSmarty
+Executable HSmarty
+  Main-Is:           CompilerMain.hs
+  Ghc-Options:       -Wall
+  build-depends:     base ==4.6.*,
+                     vector ==0.10.*,
+                     text ==0.11.*,
+                     unordered-containers ==0.2.*,
+                     aeson ==0.6.*,
+                     attoparsec ==0.10.*,
+                     mtl ==2.1.*,
+                     HTTP,
+                     bytestring >=0.10,
+                     transformers ==0.3.*,
+                     random ==1.0.*,
+                     HTF
+
+Test-Suite TestHSmarty
+  Type:              exitcode-stdio-1.0
   Main-Is:           Tests.hs
   Ghc-Options:       -Wall
   build-depends:     base ==4.6.*,

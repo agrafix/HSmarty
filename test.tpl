@@ -1,3 +1,4 @@
+{* test *}
 <html>
 <head>
   <title>{$title}</title>
