@@ -1,5 +1,5 @@
 name:                HSmarty
-version:             0.2.0.0
+version:             0.2.0.1
 synopsis:            Haskell implementation of a subset of the PHP-Smarty template language
 Homepage:            https://github.com/agrafix/HSmarty
 Bug-reports:         https://github.com/agrafix/HSmarty/issues
@@ -20,10 +20,10 @@ Library
                      Text.HSmarty.Render.Engine, Text.HSmarty.Types
   build-depends:     base ==4.6.*,
                      vector ==0.10.*,
-                     text ==0.11.*,
+                     text,
                      unordered-containers ==0.2.*,
                      aeson ==0.6.*,
-                     attoparsec ==0.10.*,
+                     attoparsec ==0.11.*,
                      attoparsec-expr ==0.1.1,
                      mtl ==2.1.*,
                      HTTP,
@@ -36,10 +36,10 @@ Test-Suite TestHSmarty
   Ghc-Options:       -Wall
   build-depends:     base ==4.6.*,
                      vector ==0.10.*,
-                     text ==0.11.*,
+                     text,
                      unordered-containers ==0.2.*,
                      aeson ==0.6.*,
-                     attoparsec ==0.10.*,
+                     attoparsec ==0.11.*,
                      attoparsec-expr ==0.1.1,
                      mtl ==2.1.*,
                      HTTP,
