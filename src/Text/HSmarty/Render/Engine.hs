@@ -3,7 +3,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 module Text.HSmarty.Render.Engine
-    ( renderTemplate, mkParam, TemplateParam )
+    ( renderTemplate, mkParam, TemplateParam, ParamMap )
 where
 
 import Text.HSmarty.Types
@@ -22,6 +22,7 @@ import qualified Data.Text as T
 import qualified Data.Text.IO as T
 import qualified Data.Vector as V
 
+-- | An template param, construct using 'mkParam'
 newtype TemplateParam
       = TemplateParam { unTemplateParam :: A.Value }
         deriving (Show, Eq)
@@ -34,6 +35,8 @@ data TemplateVar
    deriving (Show, Eq)
 
 type Env = HM.HashMap T.Text TemplateVar
+
+-- | Maps template variables to template params
 type ParamMap = HM.HashMap T.Text TemplateParam
 type PropMap = HM.HashMap T.Text A.Value
 
@@ -42,6 +45,7 @@ type EvalM a = ErrorT T.Text IO a
 instance Error T.Text where
     strMsg = T.pack
 
+-- | Pack a value as a template param
 mkParam :: A.ToJSON a => a -> TemplateParam
 mkParam = TemplateParam . A.toJSON
 
@@ -49,6 +53,8 @@ mkEnv :: ParamMap -> Env
 mkEnv =
     HM.map (\init -> TemplateVar (unTemplateParam init) HM.empty)
 
+-- | Render a template using the specified ParamMap.
+-- Results in either an error-message or the rendered template
 renderTemplate :: FilePath -> ParamMap -> IO (Either T.Text T.Text)
 renderTemplate fp mp =
     do ct <- T.readFile fp

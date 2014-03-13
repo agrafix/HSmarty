@@ -1,13 +1,13 @@
 name:                HSmarty
 version:             0.2.0.0
 synopsis:            Haskell implementation of a subset of the PHP-Smarty template language
-description:         This is an implementation of a subset of the PHP-Smarty template language. It provides a library
-                     for use within haskell, and a compiler to generate JavaScript-Code for client rendering.
+Homepage:            https://github.com/agrafix/HSmarty
+Bug-reports:         https://github.com/agrafix/HSmarty/issues
 license:             BSD3
 license-file:        LICENSE
 author:              Alexander Thiemann <mail@agrafix.net>
 maintainer:          mail@agrafix.net
-copyright:           (c) 2013 by Alexander Thiemann
+copyright:           (c) 2013 - 2014 by Alexander Thiemann
 category:            Text
 build-type:          Simple
 cabal-version:       >=1.8
@@ -44,3 +44,7 @@ Test-Suite TestHSmarty
                      mtl ==2.1.*,
                      HTTP,
                      HTF
+
+source-repository head
+  type:     git
+  location: git://github.com/agrafix/HSmarty.git
