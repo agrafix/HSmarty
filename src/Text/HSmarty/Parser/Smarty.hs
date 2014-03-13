@@ -26,8 +26,10 @@ parseSmarty fp t =
     where
       mk exprs =
           return $ Smarty fp exprs
-      pRoot =
-          (stripSpace $ many1 pStmt) <* endOfInput
+
+pRoot :: Parser [SmartyStmt]
+pRoot =
+    (stripSpace $ many1 pStmt) <* endOfInput
 
 pStmt :: Parser SmartyStmt
 pStmt =
