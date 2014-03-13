@@ -29,6 +29,24 @@ Library
                      HTTP,
                      HTF
 
+Executable HSmarty
+  hs-source-dirs:    src
+  Main-Is:           CompilerMain.hs
+  Ghc-Options:       -Wall
+  build-depends:     base ==4.6.*,
+                     vector ==0.10.*,
+                     text ==0.11.*,
+                     unordered-containers ==0.2.*,
+                     aeson ==0.6.*,
+                     attoparsec ==0.10.*,
+                     attoparsec-expr ==0.1.1,
+                     mtl ==2.1.*,
+                     HTTP,
+                     bytestring >=0.10,
+                     transformers ==0.3.*,
+                     random ==1.0.*,
+                     HTF
+
 Test-Suite TestHSmarty
   hs-source-dirs:    src
   Type:              exitcode-stdio-1.0
