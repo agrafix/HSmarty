@@ -1,5 +1,7 @@
 # HSmarty
 
+[![Build Status](https://drone.io/github.com/agrafix/HSmarty/status.png)](https://drone.io/github.com/agrafix/HSmarty/latest)
+
 Haskell implementation of a (currently) very small subset of the [PHP-Smarty][1] template language.
 
 ## Usage
