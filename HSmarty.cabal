@@ -27,7 +27,7 @@ Library
                      attoparsec-expr ==0.1.1,
                      mtl ==2.1.*,
                      HTTP,
-                     HTF
+                     HTF >=0.12.2.2 && <0.13
 
 Test-Suite TestHSmarty
   hs-source-dirs:    src
@@ -43,7 +43,7 @@ Test-Suite TestHSmarty
                      attoparsec-expr ==0.1.1,
                      mtl ==2.1.*,
                      HTTP,
-                     HTF
+                     HTF >=0.12.2.2 && <0.13
 
 source-repository head
   type:     git
