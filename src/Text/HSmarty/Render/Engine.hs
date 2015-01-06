@@ -1,17 +1,16 @@
-{-# OPTIONS_GHC -fwarn-unused-imports -fwarn-incomplete-patterns #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 module Text.HSmarty.Render.Engine
-    ( renderTemplate, mkParam, TemplateParam, ParamMap )
+    ( renderTemplate, mkParam, TemplateParam, ParamMap, SmartyError(..) )
 where
 
 import Text.HSmarty.Types
 import Text.HSmarty.Parser.Smarty
 
+import Data.Scientific
 import Control.Applicative
 import Control.Monad.Error
-import Data.Attoparsec.Text (Number(..))
 import Data.Char (ord)
 import Data.Maybe
 import Data.Vector ((!?))
@@ -40,10 +39,14 @@ type Env = HM.HashMap T.Text TemplateVar
 type ParamMap = HM.HashMap T.Text TemplateParam
 type PropMap = HM.HashMap T.Text A.Value
 
-type EvalM a = ErrorT T.Text IO a
+type EvalM a = ErrorT SmartyError IO a
 
-instance Error T.Text where
-    strMsg = T.pack
+newtype SmartyError
+    = SmartyError { unSmartyError :: T.Text }
+      deriving (Show, Eq)
+
+instance Error SmartyError where
+    strMsg = SmartyError . T.pack
 
 -- | Pack a value as a template param
 mkParam :: A.ToJSON a => a -> TemplateParam
@@ -51,11 +54,11 @@ mkParam = TemplateParam . A.toJSON
 
 mkEnv :: ParamMap -> Env
 mkEnv =
-    HM.map (\init -> TemplateVar (unTemplateParam init) HM.empty)
+    HM.map (\init' -> TemplateVar (unTemplateParam init') HM.empty)
 
 -- | Render a template using the specified ParamMap.
 -- Results in either an error-message or the rendered template
-renderTemplate :: FilePath -> ParamMap -> IO (Either T.Text T.Text)
+renderTemplate :: FilePath -> ParamMap -> IO (Either SmartyError T.Text)
 renderTemplate fp mp =
     do ct <- T.readFile fp
        tpl <- parseSmarty fp ct
@@ -79,13 +82,14 @@ applyPrintDirective t "escape" =
                       ]
           else x : htmlEscape xs
 applyPrintDirective _ pd =
-    throwError $ T.concat [ "Unknown print directive `"
-                          , pd
-                          , "`"
-                          ]
+    throwError $ SmartyError $
+    T.concat [ "Unknown print directive `"
+             , pd
+             , "`"
+             ]
 
 evalTpl :: Env -> Smarty -> EvalM T.Text
-evalTpl env (Smarty filename tpl) =
+evalTpl env (Smarty _ tpl) =
     evalBody env tpl
 
 evalStmt :: Env -> SmartyStmt -> EvalM T.Text
@@ -155,9 +159,9 @@ evalForeachBody env mKey item body (keyVal, itemVal, props) =
 
 mkForeachInput :: A.Value -> EvalM ( [ ( A.Value, A.Value, PropMap ) ], Int)
 mkForeachInput (A.Array vec) =
-    return $ ( V.toList $ V.imap (\idx elem ->
-                                      ( A.Number (I $ fromIntegral idx)
-                                      , elem
+    return $ ( V.toList $ V.imap (\idx el ->
+                                      ( A.Number (fromIntegral idx)
+                                      , el
                                       , mkForeachMap idx fSize
                                       )
                                  ) vec
@@ -167,9 +171,9 @@ mkForeachInput (A.Array vec) =
       fSize = V.length vec
 mkForeachInput (A.Object hm) =
     let (_, input) =
-            HM.foldlWithKey' (\(idx, out) key elem ->
+            HM.foldlWithKey' (\(idx, out) key el ->
                                   let newElem = ( A.String key
-                                                , elem
+                                                , el
                                                 , mkForeachMap idx hSize
                                                 )
                                   in (idx+1, newElem : out)
@@ -178,15 +182,15 @@ mkForeachInput (A.Object hm) =
     where
       hSize = HM.size hm
 mkForeachInput _ =
-    throwError "Tried to iterate over non traversable type."
+    throwError $ SmartyError "Tried to iterate over non traversable type."
 
 mkForeachMap :: Int -> Int -> PropMap
 mkForeachMap idx' size' =
-    HM.fromList [ ("index", A.Number (I idx))
-                , ("iteration", A.Number (I $ 1 + idx))
+    HM.fromList [ ("index", A.Number idx)
+                , ("iteration", A.Number $ 1 + idx)
                 , ("first", A.Bool $ idx == 0)
                 , ("last", A.Bool $ (idx+1) == size)
-                , ("total", A.Number (I size))
+                , ("total", A.Number size)
                 ]
     where
       size = fromIntegral size'
@@ -194,22 +198,28 @@ mkForeachMap idx' size' =
 
 str :: T.Text -> A.Value -> EvalM T.Text
 str _ (A.String x) = return x
-str desc _ = throwError $ T.concat [ "`", desc, "` is not a string!" ]
+str desc _ = throwError $ SmartyError $ T.concat [ "`", desc, "` is not a string!" ]
 
 int :: T.Text -> A.Value -> EvalM Int
-int _ (A.Number (I x)) = return (fromIntegral x)
-int desc _ = throwError $ T.concat [ "`", desc, "` is not an integer!" ]
+int desc (A.Number x) =
+    case floatingOrInteger x of
+      Left _ -> throwError $ SmartyError $ T.concat [ "`", desc, "` is not an integer!" ]
+      Right x' -> return x'
+int desc _ = throwError $ SmartyError $ T.concat [ "`", desc, "` is not an integer!" ]
 
 dbl :: T.Text -> A.Value -> EvalM Double
-dbl _ (A.Number (D x)) = return x
-dbl desc _ = throwError $ T.concat [ "`", desc, "` is not a double!" ]
+dbl desc (A.Number x) =
+    case floatingOrInteger x of
+      Left x' -> return x'
+      Right _ -> throwError $ SmartyError $ T.concat [ "`", desc, "` is not a double!" ]
+dbl desc _ = throwError $ SmartyError $ T.concat [ "`", desc, "` is not a double!" ]
 
 ifExists :: (Eq a, Show a) => T.Text -> a -> [(a, A.Value)] -> (A.Value -> EvalM b) -> EvalM b
 ifExists msg key env fun =
     case lookup key env of
       Just x -> fun x
       Nothing ->
-          throwError $ T.concat [ "`", T.pack $ show key, "` is not given. ", msg]
+          throwError $ SmartyError $ T.concat [ "`", T.pack $ show key, "` is not given. ", msg]
 
 lookupStr :: T.Text -> T.Text -> [(T.Text, A.Value)] -> EvalM T.Text
 lookupStr funName key env =
@@ -222,7 +232,7 @@ evalFunCall env "include" args =
                                   return (k, val)
                           ) args
        filename <- lookupStr "include" "file" evaledArgs
-       let otherArgs = filter (\arg@(k, _) ->
+       let otherArgs = filter (\(k, _) ->
                                    not $ k `elem` [ "include" ]
                               ) evaledArgs
            asTplParams = HM.fromList $ map (\(k, v) -> (k, TemplateParam v)) otherArgs
@@ -231,11 +241,12 @@ evalFunCall env "include" args =
          Right c ->
              return $ A.String c
          Left e ->
-             throwError $ T.concat ["Include failed. Error: ", e]
-evalFunCall env fname _ =
-    throwError $ T.concat [ "Call to undefined function "
-                          , fname
-                          ]
+             throwError $ SmartyError $ T.concat ["Include failed. Error: ", unSmartyError e]
+evalFunCall _ fname _ =
+    throwError $ SmartyError $
+    T.concat [ "Call to undefined function "
+             , fname
+             ]
 
 
 evalExpr :: Env -> Expr -> EvalM A.Value
@@ -251,12 +262,15 @@ evalExpr env (ExprVar v) =
             (Variable { v_prop = Just propReq }) ->
                 case HM.lookup propReq (tv_props tplVar) of
                   Just val -> return val
-                  Nothing -> throwError $ T.concat [ "Property `"
-                                                   , propReq
-                                                   , "` is not defined for variable `"
-                                                   , varName
-                                                   , "`"
-                                                   ]
+                  Nothing ->
+                      throwError $
+                      SmartyError $
+                      T.concat [ "Property `"
+                               , propReq
+                               , "` is not defined for variable `"
+                               , varName
+                               , "`"
+                               ]
             (Variable { v_path = path, v_index = mIdx }) ->
                 let pathName = T.concat [ varName
                                         , if (length path > 0) then "." else T.empty
@@ -275,51 +289,59 @@ evalExpr env (ExprVar v) =
 
 
       Nothing ->
-          throwError $ T.concat [ "Variable `"
-                                , varName
-                                , "` is not defined"
-                                ]
+          throwError $
+          SmartyError $
+          T.concat [ "Variable `"
+                   , varName
+                   , "` is not defined"
+                   ]
     where
       varName = v_name v
 
 walkIndex :: T.Text -> A.Value -> A.Value -> EvalM A.Value
-walkIndex vname (A.Number (I idx)) (A.Array arr) =
-    case arr !? (fromIntegral idx) of
+walkIndex vname (A.Number idx) (A.Array arr) =
+    case arr !? (fromJust $ toBoundedInteger idx) of
       Just val -> return val
       Nothing ->
-          throwError $ T.concat [ "Out of bounds. `"
-                                , vname
-                                , "["
-                                , T.pack $ show idx
-                                , "]` not defined."
-                                ]
+          throwError $
+          SmartyError $
+          T.concat [ "Out of bounds. `"
+                   , vname
+                   , "["
+                   , T.pack $ show idx
+                   , "]` not defined."
+                   ]
 walkIndex vname idx _ =
-    throwError $ T.concat [ "Can't access `"
-                          , T.pack $ show idx
-                          , "` in `"
-                          , vname
-                          , "`. Index is not an integer or value not an array!"
-                          ]
+    throwError $
+    SmartyError $
+    T.concat [ "Can't access `"
+             , T.pack $ show idx
+             , "` in `"
+             , vname
+             , "`. Index is not an integer or value not an array!"
+             ]
 
 walkPath :: T.Text -> [T.Text] -> A.Value -> EvalM A.Value
-walkPath vname [] val = return val
+walkPath _ [] val = return val
 walkPath vname (path:xs) (A.Object obj) =
     case HM.lookup path obj of
       Just val -> walkPath (T.concat [vname, ".", path]) xs val
       Nothing ->
-          throwError $ T.concat [ "Variable `"
-                                , vname
-                                , "` doesn't have the key `"
-                                , path
-                                , "`"
-                                ]
-walkPath vname (path:xs) _ =
-    throwError $ T.concat [ "Variable `"
-                          , vname
-                          , "` is not a map! Can't lookup `"
-                          , path
-                          , "`"
-                          ]
+          throwError $ SmartyError $
+          T.concat [ "Variable `"
+                   , vname
+                   , "` doesn't have the key `"
+                   , path
+                   , "`"
+                   ]
+walkPath vname (path:_) _ =
+    throwError $ SmartyError $
+    T.concat [ "Variable `"
+             , vname
+             , "` is not a map! Can't lookup `"
+             , path
+             , "`"
+             ]
 
 evalBinOp :: Env -> BinOp -> EvalM A.Value
 evalBinOp env (BinEq a b) =
@@ -330,7 +352,7 @@ evalBinOp env (BinNot e) =
          A.Bool a ->
              return (A.Bool $ not a)
          _ ->
-             throwError "Tried to evaluate a NOT on a non boolean value"
+             throwError $ SmartyError "Tried to evaluate a NOT on a non boolean value"
 evalBinOp env (BinOr x y) =
     boolOp "Or" (||) (x, y) env
 evalBinOp env (BinAnd x y) =
@@ -359,27 +381,27 @@ boolOp d op exprs env =
     where
       bOp (A.Bool a) (A.Bool b) =
           return $ a `op` b
-      bOp _ _ = throwError $ T.concat [ "Tried ", d, "Op and on two non boolean values" ]
+      bOp _ _ = throwError $ SmartyError $ T.concat [ "Tried ", d, "Op and on two non boolean values" ]
 
-numOp :: T.Text -> (Number -> Number -> Bool) -> (Expr, Expr) -> Env -> EvalM A.Value
+numOp :: T.Text -> (Scientific -> Scientific -> Bool) -> (Expr, Expr) -> Env -> EvalM A.Value
 numOp =
     numGenOp boolResOp
 
-calcOp :: T.Text -> (Number -> Number -> Number) -> (Expr, Expr) -> Env -> EvalM A.Value
+calcOp :: T.Text -> (Scientific -> Scientific -> Scientific) -> (Expr, Expr) -> Env -> EvalM A.Value
 calcOp =
     numGenOp numResOp
 
 numGenOp :: ((A.Value -> A.Value -> EvalM a)
                  -> (Expr, Expr) -> Env -> EvalM A.Value)
-         -> T.Text -> (Number -> Number -> a) -> (Expr, Expr) -> Env -> EvalM A.Value
+         -> T.Text -> (Scientific -> Scientific -> a) -> (Expr, Expr) -> Env -> EvalM A.Value
 numGenOp fun d op exprs env =
     fun nOp exprs env
     where
       nOp (A.Number a) (A.Number b) =
           return $ a `op` b
-      nOp _ _ = throwError $ T.concat [ "Tried ", d, "Op and on two non numeric values" ]
+      nOp _ _ = throwError $ SmartyError $ T.concat [ "Tried ", d, "Op and on two non numeric values" ]
 
-numResOp :: (A.Value -> A.Value -> EvalM Number)
+numResOp :: (A.Value -> A.Value -> EvalM Scientific)
        -> (Expr, Expr) -> Env -> EvalM A.Value
 numResOp fun (a, b) env =
     do a' <- evalExpr env a
