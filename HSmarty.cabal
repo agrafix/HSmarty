@@ -1,6 +1,7 @@
 name:                HSmarty
 version:             0.2.0.3
-synopsis:            Haskell implementation of a subset of the PHP-Smarty template language
+synopsis:            Small template engine
+description:         Haskell implementation of a subset of the PHP-Smarty template language
 Homepage:            https://github.com/agrafix/HSmarty
 Bug-reports:         https://github.com/agrafix/HSmarty/issues
 license:             BSD3
