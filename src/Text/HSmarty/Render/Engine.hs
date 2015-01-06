@@ -2,7 +2,12 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 module Text.HSmarty.Render.Engine
-    ( renderTemplate, mkParam, TemplateParam, ParamMap, SmartyError(..) )
+    ( TemplateParam, ParamMap
+    , mkParam
+    , SmartyCtx, SmartyError(..)
+    , prepareTemplate, applyTemplate
+    , renderTemplate
+    )
 where
 
 import Text.HSmarty.Types
@@ -41,6 +46,10 @@ type PropMap = HM.HashMap T.Text A.Value
 
 type EvalM a = ErrorT SmartyError IO a
 
+newtype SmartyCtx
+    = SmartyCtx { unSmartyCtx :: Smarty }
+      deriving (Show, Eq)
+
 newtype SmartyError
     = SmartyError { unSmartyError :: T.Text }
       deriving (Show, Eq)
@@ -56,13 +65,24 @@ mkEnv :: ParamMap -> Env
 mkEnv =
     HM.map (\init' -> TemplateVar (unTemplateParam init') HM.empty)
 
+-- | Parse and compile a template
+prepareTemplate :: FilePath -> IO SmartyCtx
+prepareTemplate fp =
+    do ct <- T.readFile fp
+       SmartyCtx <$> parseSmarty fp ct
+
+-- | Fill a template with values and print it as Text
+applyTemplate :: SmartyCtx -> ParamMap -> IO (Either SmartyError T.Text)
+applyTemplate (SmartyCtx ctx) mp =
+    runErrorT $ evalTpl (mkEnv mp) ctx
+
 -- | Render a template using the specified ParamMap.
--- Results in either an error-message or the rendered template
+-- Results in either an error-message or the rendered template.
+-- DO NOT USE IN Production. Use `prepareTemplate` and `applyTemplate` instead.
 renderTemplate :: FilePath -> ParamMap -> IO (Either SmartyError T.Text)
 renderTemplate fp mp =
-    do ct <- T.readFile fp
-       tpl <- parseSmarty fp ct
-       runErrorT $ evalTpl (mkEnv mp) tpl
+    do ctx <- prepareTemplate fp
+       applyTemplate ctx mp
 
 applyPrintDirective :: T.Text -> PrintDirective -> EvalM T.Text
 applyPrintDirective t "urlencode" =
