@@ -15,7 +15,7 @@ import Text.HSmarty.Parser.Smarty
 
 import Data.Scientific
 import Control.Applicative
-import Control.Monad.Error
+import Control.Monad.Except
 import Data.Char (ord)
 import Data.Maybe
 import Data.Vector ((!?))
@@ -44,18 +44,15 @@ type Env = HM.HashMap T.Text TemplateVar
 type ParamMap = HM.HashMap T.Text TemplateParam
 type PropMap = HM.HashMap T.Text A.Value
 
-type EvalM a = ErrorT SmartyError IO a
+type EvalM a = ExceptT SmartyError IO a
 
 newtype SmartyCtx
-    = SmartyCtx { unSmartyCtx :: Smarty }
+    = SmartyCtx { _unSmartyCtx :: Smarty }
       deriving (Show, Eq)
 
 newtype SmartyError
     = SmartyError { unSmartyError :: T.Text }
       deriving (Show, Eq)
-
-instance Error SmartyError where
-    strMsg = SmartyError . T.pack
 
 -- | Pack a value as a template param
 mkParam :: A.ToJSON a => a -> TemplateParam
@@ -74,7 +71,7 @@ prepareTemplate fp =
 -- | Fill a template with values and print it as Text
 applyTemplate :: SmartyCtx -> ParamMap -> IO (Either SmartyError T.Text)
 applyTemplate (SmartyCtx ctx) mp =
-    runErrorT $ evalTpl (mkEnv mp) ctx
+    runExceptT $ evalTpl (mkEnv mp) ctx
 
 -- | Render a template using the specified ParamMap.
 -- Results in either an error-message or the rendered template.

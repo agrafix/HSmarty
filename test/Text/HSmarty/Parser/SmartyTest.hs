@@ -3,13 +3,14 @@
 {-# LANGUAGE RankNTypes #-}
 module Text.HSmarty.Parser.SmartyTest where
 
+import Data.Attoparsec.Text
+import Paths_HSmarty
+import Test.Framework
 import Text.HSmarty.Parser.Smarty
 import Text.HSmarty.Types
-
-import Data.Attoparsec.Text
-import Test.Framework
 import qualified Data.Aeson as A
 import qualified Data.Text as T
+import qualified Data.Text.IO as T
 
 parserTest :: forall b. (Eq b, Show b)
            => Parser b -> T.Text -> b -> IO ()
@@ -18,6 +19,21 @@ parserTest parser input expected =
     where
       comp x =
           assertEqual x expected
+
+readDataFile :: String -> IO T.Text
+readDataFile name =
+    do fp <- getDataFileName name
+       T.readFile fp
+
+test_complex :: IO ()
+test_complex =
+    do testData <- readDataFile "test.tpl"
+       case parseOnly pRoot testData of
+         Left errMsg ->
+             fail errMsg
+         Right _ ->
+             return ()
+
 
 test_literalParser :: IO ()
 test_literalParser =
