@@ -6,8 +6,7 @@ module Text.HSmarty.Render.Engine
     ( TemplateParam, ParamMap
     , mkParam
     , SmartyCtx, SmartyError(..)
-    , prepareTemplate, applyTemplate
-    , renderTemplate
+    , prepareTemplate, prepareTemplates, applyTemplate
     )
 where
 
@@ -16,11 +15,14 @@ import Text.HSmarty.Types
 
 import Control.Applicative
 import Control.Monad.Except
+import Control.Monad.Identity
 import Data.Char (ord)
 import Data.Maybe
+import Data.Monoid
 import Data.Scientific
 import Data.Vector ((!?))
 import Network.HTTP.Base (urlEncode)
+import System.FilePath.Glob
 import qualified Data.Aeson as A
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
@@ -39,17 +41,21 @@ data TemplateVar
    }
    deriving (Show, Eq)
 
-type Env = HM.HashMap T.Text TemplateVar
-
 -- | Maps template variables to template params
 type ParamMap = HM.HashMap T.Text TemplateParam
 type PropMap = HM.HashMap T.Text A.Value
 
-type EvalM a = ExceptT SmartyError IO a
+type EvalM m a = ExceptT SmartyError m a
 
 newtype SmartyCtx
-    = SmartyCtx { _unSmartyCtx :: Smarty }
+    = SmartyCtx { unSmartyCtx :: HM.HashMap FilePath Smarty }
       deriving (Show, Eq)
+
+data Env =
+    Env
+    { e_var :: HM.HashMap T.Text TemplateVar
+    , e_ctx :: SmartyCtx
+    } deriving (Show, Eq)
 
 newtype SmartyError
     = SmartyError { unSmartyError :: T.Text }
@@ -59,30 +65,45 @@ newtype SmartyError
 mkParam :: A.ToJSON a => a -> TemplateParam
 mkParam = TemplateParam . A.toJSON
 
-mkEnv :: ParamMap -> Env
-mkEnv =
-    HM.map (\init' -> TemplateVar (unTemplateParam init') HM.empty)
+mkEnv :: ParamMap -> SmartyCtx -> Env
+mkEnv pm ctx =
+    Env
+    { e_var = HM.map (\init' -> TemplateVar (unTemplateParam init') HM.empty) pm
+    , e_ctx = ctx
+    }
 
 -- | Parse and compile a template
 prepareTemplate :: FilePath -> IO SmartyCtx
 prepareTemplate fp =
     do ct <- T.readFile fp
-       SmartyCtx <$> parseSmarty fp ct
+       SmartyCtx . HM.singleton fp <$> parseSmarty fp ct
+
+-- | Parse and compiles templates matching a glob in a directiry
+prepareTemplates :: String -> FilePath -> IO SmartyCtx
+prepareTemplates pat dir =
+    do files <- globDir1 (compile pat) dir
+       ctx <-
+           foldM (\hm f ->
+                      do ct <- T.readFile f >>= parseSmarty f
+                         pure (HM.insert f ct hm)
+                 ) mempty files
+       pure $ SmartyCtx ctx
 
 -- | Fill a template with values and print it as Text
-applyTemplate :: SmartyCtx -> ParamMap -> IO (Either SmartyError T.Text)
-applyTemplate (SmartyCtx ctx) mp =
-    runExceptT $ evalTpl (mkEnv mp) ctx
+applyTemplate :: FilePath -> SmartyCtx -> ParamMap -> Either SmartyError T.Text
+applyTemplate a b c =
+    runIdentity $ runExceptT $ applyTemplate' a b c
 
--- | Render a template using the specified ParamMap.
--- Results in either an error-message or the rendered template.
--- DO NOT USE IN Production. Use `prepareTemplate` and `applyTemplate` instead.
-renderTemplate :: FilePath -> ParamMap -> IO (Either SmartyError T.Text)
-renderTemplate fp mp =
-    do ctx <- prepareTemplate fp
-       applyTemplate ctx mp
+applyTemplate' :: Monad m => FilePath -> SmartyCtx -> ParamMap -> ExceptT SmartyError m T.Text
+applyTemplate' template ctx mp =
+    do getTpl <-
+           case HM.lookup template (unSmartyCtx ctx) of
+             Just ok -> pure ok
+             Nothing ->
+                 throwError (SmartyError $ T.pack $ "Template " ++ template ++ " not compiled")
+       evalTpl (mkEnv mp ctx) getTpl
 
-applyPrintDirective :: T.Text -> PrintDirective -> EvalM T.Text
+applyPrintDirective :: Monad m => T.Text -> PrintDirective -> EvalM m T.Text
 applyPrintDirective t "urlencode" =
     return $ T.pack $ urlEncode $ T.unpack t
 applyPrintDirective t "nl2br" =
@@ -107,11 +128,11 @@ applyPrintDirective _ pd =
              , "`"
              ]
 
-evalTpl :: Env -> Smarty -> EvalM T.Text
+evalTpl :: Monad m => Env -> Smarty -> EvalM m T.Text
 evalTpl env (Smarty _ tpl) =
     evalBody env tpl
 
-evalStmt :: Env -> SmartyStmt -> EvalM T.Text
+evalStmt :: Monad m => Env -> SmartyStmt -> EvalM m T.Text
 evalStmt _ (SmartyText t) = return t
 evalStmt _ (SmartyComment _) = return T.empty
 evalStmt env (SmartyPrint expr directives) =
@@ -147,12 +168,12 @@ evalStmt env (SmartyForeach (Foreach source mKey val body elseBody)) =
        else do runs <- mapM (evalForeachBody env mKey val body) preparedSource
                return $ T.concat runs
 
-evalBody :: Env -> [SmartyStmt] -> EvalM T.Text
+evalBody :: Monad m => Env -> [SmartyStmt] -> EvalM m T.Text
 evalBody env stmt =
     do b <- mapM (evalStmt env) stmt
        return $ T.concat b
 
-exprToText :: Env -> Expr -> EvalM T.Text
+exprToText :: Monad m => Env -> Expr -> EvalM m T.Text
 exprToText env expr =
     do evaled <- evalExpr env expr
        case evaled of
@@ -166,17 +187,18 @@ exprToText env expr =
          A.Array a ->
              return $ T.pack $ show a
 
-evalForeachBody :: Env -> Maybe T.Text -> T.Text -> [ SmartyStmt ] -> ( A.Value, A.Value, PropMap ) -> EvalM T.Text
-evalForeachBody env mKey item body (keyVal, itemVal, props) =
-    let env' = HM.insert item (TemplateVar itemVal props) env
+evalForeachBody :: Monad m => Env -> Maybe T.Text -> T.Text -> [ SmartyStmt ] -> ( A.Value, A.Value, PropMap ) -> EvalM m T.Text
+evalForeachBody envFull mKey item body (keyVal, itemVal, props) =
+    let env = e_var envFull
+        env' = HM.insert item (TemplateVar itemVal props) env
         env'' =
             case mKey of
               Just key -> HM.insert key (TemplateVar keyVal HM.empty) env'
               Nothing -> env'
-    in evalBody env'' body
+    in evalBody (envFull { e_var = env'' }) body
 
 
-mkForeachInput :: A.Value -> EvalM ( [ ( A.Value, A.Value, PropMap ) ], Int)
+mkForeachInput :: Monad m => A.Value -> EvalM m ( [ ( A.Value, A.Value, PropMap ) ], Int)
 mkForeachInput (A.Array vec) =
     return $ ( V.toList $ V.imap (\idx el ->
                                       ( A.Number (fromIntegral idx)
@@ -215,36 +237,36 @@ mkForeachMap idx' size' =
       size = fromIntegral size'
       idx = fromIntegral idx'
 
-str :: T.Text -> A.Value -> EvalM T.Text
+str :: Monad m => T.Text -> A.Value -> EvalM m T.Text
 str _ (A.String x) = return x
 str desc _ = throwError $ SmartyError $ T.concat [ "`", desc, "` is not a string!" ]
 
-int :: T.Text -> A.Value -> EvalM Int
+int :: Monad m => T.Text -> A.Value -> EvalM m Int
 int desc (A.Number x) =
     case floatingOrInteger x of
       Left _ -> throwError $ SmartyError $ T.concat [ "`", desc, "` is not an integer!" ]
       Right x' -> return x'
 int desc _ = throwError $ SmartyError $ T.concat [ "`", desc, "` is not an integer!" ]
 
-dbl :: T.Text -> A.Value -> EvalM Double
+dbl :: Monad m => T.Text -> A.Value -> EvalM m Double
 dbl desc (A.Number x) =
     case floatingOrInteger x of
       Left x' -> return x'
       Right _ -> throwError $ SmartyError $ T.concat [ "`", desc, "` is not a double!" ]
 dbl desc _ = throwError $ SmartyError $ T.concat [ "`", desc, "` is not a double!" ]
 
-ifExists :: (Eq a, Show a) => T.Text -> a -> [(a, A.Value)] -> (A.Value -> EvalM b) -> EvalM b
+ifExists :: (Eq a, Show a, Monad m) => T.Text -> a -> [(a, A.Value)] -> (A.Value -> EvalM m b) -> EvalM m b
 ifExists msg key env fun =
     case lookup key env of
       Just x -> fun x
       Nothing ->
           throwError $ SmartyError $ T.concat [ "`", T.pack $ show key, "` is not given. ", msg]
 
-lookupStr :: T.Text -> T.Text -> [(T.Text, A.Value)] -> EvalM T.Text
+lookupStr :: Monad m => T.Text -> T.Text -> [(T.Text, A.Value)] -> EvalM m T.Text
 lookupStr funName key env =
     ifExists (T.concat ["Param for `", funName, "`"]) key env (str key)
 
-evalFunCall :: Env -> T.Text -> [ (T.Text, Expr) ] -> EvalM A.Value
+evalFunCall :: Monad m => Env -> T.Text -> [ (T.Text, Expr) ] -> EvalM m A.Value
 evalFunCall env "include" args =
     do evaledArgs <- mapM (\(k, expr) ->
                                do val <- evalExpr env expr
@@ -255,12 +277,7 @@ evalFunCall env "include" args =
                                    not $ k `elem` [ "include" ]
                               ) evaledArgs
            asTplParams = HM.fromList $ map (\(k, v) -> (k, TemplateParam v)) otherArgs
-       content <- liftIO $ renderTemplate (T.unpack filename) asTplParams
-       case content of
-         Right c ->
-             return $ A.String c
-         Left e ->
-             throwError $ SmartyError $ T.concat ["Include failed. Error: ", unSmartyError e]
+       A.String <$> applyTemplate' (T.unpack filename) (e_ctx env) asTplParams
 evalFunCall _ fname _ =
     throwError $ SmartyError $
     T.concat [ "Call to undefined function "
@@ -268,14 +285,14 @@ evalFunCall _ fname _ =
              ]
 
 
-evalExpr :: Env -> Expr -> EvalM A.Value
+evalExpr :: Monad m => Env -> Expr -> EvalM m A.Value
 evalExpr _ (ExprLit v) = return v
 evalExpr env (ExprBin op) =
     evalBinOp env op
 evalExpr env (ExprFun funCall) =
     evalFunCall env (f_name funCall) (f_args funCall)
 evalExpr env (ExprVar v) =
-    case HM.lookup varName env of
+    case HM.lookup varName (e_var env) of
       Just tplVar ->
           case v of
             (Variable { v_prop = Just propReq }) ->
@@ -317,7 +334,7 @@ evalExpr env (ExprVar v) =
     where
       varName = v_name v
 
-walkIndex :: T.Text -> A.Value -> A.Value -> EvalM A.Value
+walkIndex :: Monad m => T.Text -> A.Value -> A.Value -> EvalM m A.Value
 walkIndex vname (A.Number idx) (A.Array arr) =
     case arr !? (fromJust $ toBoundedInteger idx) of
       Just val -> return val
@@ -340,7 +357,7 @@ walkIndex vname idx _ =
              , "`. Index is not an integer or value not an array!"
              ]
 
-walkPath :: T.Text -> [T.Text] -> A.Value -> EvalM A.Value
+walkPath :: Monad m => T.Text -> [T.Text] -> A.Value -> EvalM m A.Value
 walkPath _ [] val = return val
 walkPath vname (path:xs) (A.Object obj) =
     case HM.lookup path obj of
@@ -362,7 +379,7 @@ walkPath vname (path:_) _ =
              , "`"
              ]
 
-evalBinOp :: Env -> BinOp -> EvalM A.Value
+evalBinOp :: Monad m => Env -> BinOp -> EvalM m A.Value
 evalBinOp env (BinEq a b) =
     boolResOp (\x y -> return $ x == y) (a, b) env
 evalBinOp env (BinNot e) =
@@ -394,7 +411,7 @@ evalBinOp env (BinDiv x y) =
     calcOp "Div" (/) (x, y) env
 
 
-boolOp :: T.Text -> (Bool -> Bool -> Bool) -> (Expr, Expr) -> Env -> EvalM A.Value
+boolOp :: Monad m => T.Text -> (Bool -> Bool -> Bool) -> (Expr, Expr) -> Env -> EvalM m A.Value
 boolOp d op exprs env =
     boolResOp bOp exprs env
     where
@@ -402,17 +419,17 @@ boolOp d op exprs env =
           return $ a `op` b
       bOp _ _ = throwError $ SmartyError $ T.concat [ "Tried ", d, "Op and on two non boolean values" ]
 
-numOp :: T.Text -> (Scientific -> Scientific -> Bool) -> (Expr, Expr) -> Env -> EvalM A.Value
+numOp :: Monad m => T.Text -> (Scientific -> Scientific -> Bool) -> (Expr, Expr) -> Env -> EvalM m A.Value
 numOp =
     numGenOp boolResOp
 
-calcOp :: T.Text -> (Scientific -> Scientific -> Scientific) -> (Expr, Expr) -> Env -> EvalM A.Value
+calcOp :: Monad m => T.Text -> (Scientific -> Scientific -> Scientific) -> (Expr, Expr) -> Env -> EvalM m A.Value
 calcOp =
     numGenOp numResOp
 
-numGenOp :: ((A.Value -> A.Value -> EvalM a)
-                 -> (Expr, Expr) -> Env -> EvalM A.Value)
-         -> T.Text -> (Scientific -> Scientific -> a) -> (Expr, Expr) -> Env -> EvalM A.Value
+numGenOp :: Monad m => ((A.Value -> A.Value -> EvalM m a)
+                 -> (Expr, Expr) -> Env -> EvalM m A.Value)
+         -> T.Text -> (Scientific -> Scientific -> a) -> (Expr, Expr) -> Env -> EvalM m A.Value
 numGenOp fun d op exprs env =
     fun nOp exprs env
     where
@@ -420,15 +437,15 @@ numGenOp fun d op exprs env =
           return $ a `op` b
       nOp _ _ = throwError $ SmartyError $ T.concat [ "Tried ", d, "Op and on two non numeric values" ]
 
-numResOp :: (A.Value -> A.Value -> EvalM Scientific)
-       -> (Expr, Expr) -> Env -> EvalM A.Value
+numResOp :: Monad m => (A.Value -> A.Value -> EvalM m Scientific)
+       -> (Expr, Expr) -> Env -> EvalM m A.Value
 numResOp fun (a, b) env =
     do a' <- evalExpr env a
        b' <- evalExpr env b
        A.Number <$> fun a' b'
 
-boolResOp :: (A.Value -> A.Value -> EvalM Bool)
-       -> (Expr, Expr) -> Env -> EvalM A.Value
+boolResOp :: Monad m => (A.Value -> A.Value -> EvalM m Bool)
+       -> (Expr, Expr) -> Env -> EvalM m A.Value
 boolResOp fun (a, b) env =
     do a' <- evalExpr env a
        b' <- evalExpr env b

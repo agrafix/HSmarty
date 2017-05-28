@@ -33,7 +33,8 @@ Library
                      scientific >=0.3,
                      text >=1.2,
                      unordered-containers >=0.2,
-                     vector >=0.10
+                     vector >=0.10,
+                     Glob >= 0.7
 
 Test-Suite TestHSmarty
   hs-source-dirs:    test
