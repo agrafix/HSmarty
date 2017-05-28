@@ -2,6 +2,7 @@
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DoAndIfThenElse #-}
+{-# LANGUAGE ScopedTypeVariables #-}
 module Text.HSmarty.Render.Engine
     ( TemplateParam, ParamMap
     , mkParam
@@ -398,6 +399,7 @@ boolOp :: T.Text -> (Bool -> Bool -> Bool) -> (Expr, Expr) -> Env -> EvalM A.Val
 boolOp d op exprs env =
     boolResOp bOp exprs env
     where
+      bOp :: A.Value -> A.Value -> ExceptT SmartyError IO Bool
       bOp (A.Bool a) (A.Bool b) =
           return $ a `op` b
       bOp _ _ = throwError $ SmartyError $ T.concat [ "Tried ", d, "Op and on two non boolean values" ]
@@ -410,12 +412,13 @@ calcOp :: T.Text -> (Scientific -> Scientific -> Scientific) -> (Expr, Expr) -> 
 calcOp =
     numGenOp numResOp
 
-numGenOp :: ((A.Value -> A.Value -> EvalM a)
+numGenOp :: forall a . ((A.Value -> A.Value -> EvalM a)
                  -> (Expr, Expr) -> Env -> EvalM A.Value)
          -> T.Text -> (Scientific -> Scientific -> a) -> (Expr, Expr) -> Env -> EvalM A.Value
 numGenOp fun d op exprs env =
     fun nOp exprs env
     where
+      nOp :: A.Value -> A.Value -> ExceptT SmartyError IO a
       nOp (A.Number a) (A.Number b) =
           return $ a `op` b
       nOp _ _ = throwError $ SmartyError $ T.concat [ "Tried ", d, "Op and on two non numeric values" ]
