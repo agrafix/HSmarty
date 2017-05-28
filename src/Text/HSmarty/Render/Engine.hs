@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 {-# LANGUAGE OverloadedStrings #-}
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DoAndIfThenElse #-}
@@ -10,14 +11,14 @@ module Text.HSmarty.Render.Engine
     )
 where
 
-import Text.HSmarty.Types
 import Text.HSmarty.Parser.Smarty
+import Text.HSmarty.Types
 
-import Data.Scientific
 import Control.Applicative
 import Control.Monad.Except
 import Data.Char (ord)
 import Data.Maybe
+import Data.Scientific
 import Data.Vector ((!?))
 import Network.HTTP.Base (urlEncode)
 import qualified Data.Aeson as A
@@ -89,6 +90,7 @@ applyPrintDirective t "nl2br" =
 applyPrintDirective t "escape" =
     return $ T.pack $ htmlEscape $ T.unpack t
     where
+      forbidden :: String
       forbidden = "<&\">'/"
       htmlEscape :: String -> String
       htmlEscape [] = []
