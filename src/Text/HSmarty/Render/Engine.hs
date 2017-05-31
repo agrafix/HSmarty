@@ -146,10 +146,12 @@ evalStmt env (SmartyIf (If cases elseBody)) =
                                 do r <- evalExpr env cond
                                    b <- evalBody env body
                                    case r of
-                                     (A.Bool True) ->
-                                         return $ Just b
-                                     _ ->
+                                     (A.Bool False) ->
                                          return Nothing
+                                     A.Null -> return Nothing
+                                     (A.Array v) | null v -> return Nothing
+                                     _ ->
+                                         return $ Just b
                            ) cases
        case catMaybes evaledCases of
          (x:_) ->
