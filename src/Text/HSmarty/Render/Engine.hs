@@ -246,20 +246,6 @@ str :: Monad m => T.Text -> A.Value -> EvalM m T.Text
 str _ (A.String x) = return x
 str desc _ = throwError $ SmartyError $ T.concat [ "`", desc, "` is not a string!" ]
 
-int :: Monad m => T.Text -> A.Value -> EvalM m Int
-int desc (A.Number x) =
-    case floatingOrInteger x of
-      Left _ -> throwError $ SmartyError $ T.concat [ "`", desc, "` is not an integer!" ]
-      Right x' -> return x'
-int desc _ = throwError $ SmartyError $ T.concat [ "`", desc, "` is not an integer!" ]
-
-dbl :: Monad m => T.Text -> A.Value -> EvalM m Double
-dbl desc (A.Number x) =
-    case floatingOrInteger x of
-      Left x' -> return x'
-      Right _ -> throwError $ SmartyError $ T.concat [ "`", desc, "` is not a double!" ]
-dbl desc _ = throwError $ SmartyError $ T.concat [ "`", desc, "` is not a double!" ]
-
 ifExists :: (Eq a, Show a, Monad m) => T.Text -> a -> [(a, A.Value)] -> (A.Value -> EvalM m b) -> EvalM m b
 ifExists msg key env fun =
     case lookup key env of
