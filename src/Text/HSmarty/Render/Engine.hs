@@ -13,15 +13,14 @@ where
 import Text.HSmarty.Parser.Smarty
 import Text.HSmarty.Types
 
-import Control.Applicative
 import Control.Monad.Except
 import Control.Monad.Identity
 import Data.Char (ord)
 import Data.Maybe
-import Data.Monoid
 import Data.Scientific
 import Data.Vector ((!?))
 import Network.HTTP.Base (urlEncode)
+import System.FilePath
 import System.FilePath.Glob
 import qualified Data.Aeson as A
 import qualified Data.HashMap.Strict as HM
@@ -48,8 +47,9 @@ type PropMap = HM.HashMap T.Text A.Value
 type EvalM m a = ExceptT SmartyError m a
 
 newtype SmartyCtx
-    = SmartyCtx { unSmartyCtx :: HM.HashMap FilePath Smarty }
-      deriving (Show, Eq)
+    = SmartyCtx
+    { unSmartyCtx :: HM.HashMap FilePath Smarty
+    } deriving (Show, Eq)
 
 data Env =
     Env
@@ -76,16 +76,19 @@ mkEnv pm ctx =
 prepareTemplate :: FilePath -> IO SmartyCtx
 prepareTemplate fp =
     do ct <- T.readFile fp
-       SmartyCtx . HM.singleton fp <$> parseSmarty fp ct
+       tpl <- HM.singleton fp <$> parseSmarty fp ct
+       pure $ SmartyCtx tpl
 
 -- | Parse and compiles templates matching a glob in a directiry
 prepareTemplates :: String -> FilePath -> IO SmartyCtx
 prepareTemplates pat dir =
     do files <- globDir1 (compile pat) dir
+       let dirDropper =
+               makeRelative dir
        ctx <-
            foldM (\hm f ->
                       do ct <- T.readFile f >>= parseSmarty f
-                         pure (HM.insert f ct hm)
+                         pure (HM.insert (dirDropper f) ct hm)
                  ) mempty files
        pure $ SmartyCtx ctx
 

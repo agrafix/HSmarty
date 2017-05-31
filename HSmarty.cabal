@@ -34,7 +34,8 @@ Library
                      text >=1.2,
                      unordered-containers >=0.2,
                      vector >=0.10,
-                     Glob >= 0.7
+                     Glob >= 0.7,
+                     filepath
 
 Test-Suite TestHSmarty
   hs-source-dirs:    test
