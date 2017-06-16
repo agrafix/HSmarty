@@ -35,7 +35,8 @@ Library
                      unordered-containers >=0.2,
                      vector >=0.10,
                      Glob >= 0.7,
-                     filepath
+                     filepath,
+                     bytestring
 
 Test-Suite TestHSmarty
   hs-source-dirs:    test

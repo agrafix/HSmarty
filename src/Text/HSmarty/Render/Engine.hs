@@ -23,8 +23,10 @@ import Network.HTTP.Base (urlEncode)
 import System.FilePath
 import System.FilePath.Glob
 import qualified Data.Aeson as A
+import qualified Data.ByteString.Lazy as BSL
 import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
+import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
 import qualified Data.Vector as V
 
@@ -106,13 +108,22 @@ applyTemplate' template ctx mp =
                  throwError (SmartyError $ T.pack $ "Template " ++ template ++ " not compiled")
        evalTpl (mkEnv mp ctx) getTpl
 
-applyPrintDirective :: Monad m => T.Text -> PrintDirective -> EvalM m T.Text
-applyPrintDirective t "urlencode" =
-    return $ T.pack $ urlEncode $ T.unpack t
-applyPrintDirective t "nl2br" =
-    return $ T.replace "\n" "<br />" t
-applyPrintDirective t "escape" =
-    return $ T.pack $ htmlEscape $ T.unpack t
+txtPdHelper ::
+    Monad m => Env -> Expr -> (T.Text -> T.Text) -> ExceptT SmartyError m Expr
+txtPdHelper env expr go =
+    do t <- exprToText env expr
+       return $ ExprLit $ A.String $ go t
+
+applyPrintDirective :: Monad m => Env -> Expr -> PrintDirective -> EvalM m Expr
+applyPrintDirective env expr "json" =
+    do evaled <- evalExpr env expr
+       pure $ ExprLit $ A.String $ T.decodeUtf8 $ BSL.toStrict $ A.encode evaled
+applyPrintDirective env expr "urlencode" =
+    txtPdHelper env expr (T.pack . urlEncode . T.unpack)
+applyPrintDirective env expr "nl2br" =
+    txtPdHelper env expr (T.replace "\n" "<br />")
+applyPrintDirective env expr "escape" =
+    txtPdHelper env expr (T.pack . htmlEscape . T.unpack)
     where
       forbidden :: String
       forbidden = "<&\">'/"
@@ -124,7 +135,7 @@ applyPrintDirective t "escape" =
                       , htmlEscape xs
                       ]
           else x : htmlEscape xs
-applyPrintDirective _ pd =
+applyPrintDirective _ _ pd =
     throwError $ SmartyError $
     T.concat [ "Unknown print directive `"
              , pd
@@ -139,8 +150,8 @@ evalStmt :: Monad m => Env -> SmartyStmt -> EvalM m T.Text
 evalStmt _ (SmartyText t) = return t
 evalStmt _ (SmartyComment _) = return T.empty
 evalStmt env (SmartyPrint expr directives) =
-    do t <- exprToText env expr
-       foldM applyPrintDirective t directives
+    do e <- foldM (applyPrintDirective env) expr directives
+       exprToText env e
 evalStmt env (SmartyIf (If cases elseBody)) =
     do evaledCases <- mapM (\(cond, body) ->
                                 do r <- evalExpr env cond
