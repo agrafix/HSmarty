@@ -45,7 +45,8 @@ test_commentParser =
 
 test_varParser :: IO ()
 test_varParser =
-    parserTest pVar "$hallo.sub@prop" (Variable "hallo" ["sub"] Nothing (Just "prop"))
+    do parserTest pVar "$hallo.sub@prop" (Variable "hallo" ["sub"] Nothing (Just "prop"))
+       parserTest pVar "$hallo.foo_bar" (Variable "hallo" ["foo_bar"] Nothing Nothing)
 
 test_if :: IO ()
 test_if =

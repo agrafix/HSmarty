@@ -67,7 +67,7 @@ pVar =
 
 pName :: Parser T.Text
 pName =
-    identP isAlpha isAlphaNum
+    identP (\c -> isAlpha c || c == '_') (\c -> isAlphaNum c || c == '_')
 
 pLiteral :: Parser T.Text
 pLiteral =
