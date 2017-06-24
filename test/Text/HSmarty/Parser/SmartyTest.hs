@@ -47,6 +47,21 @@ test_varParser :: IO ()
 test_varParser =
     parserTest pVar "$hallo.sub@prop" (Variable "hallo" ["sub"] Nothing (Just "prop"))
 
+test_if :: IO ()
+test_if =
+    do parserTest pIf "{if $var@last}Bye{/if}" expect
+       parserTest pIf "{if ($var@last)}Bye{/if}" expect
+    where
+      expect =
+          If
+          { if_cases =
+                  [( ExprVar (Variable "var" [] Nothing (Just "last"))
+                   , [SmartyText "Bye"]
+                   )
+                  ]
+          , if_else = Nothing
+          }
+
 test_rootParser :: IO ()
 test_rootParser =
     parserTest pRoot "{if true}{include file='hallo.tpl' var1=23}{else}Nothing{/if}" expect

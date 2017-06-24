@@ -2,12 +2,12 @@
 {-# LANGUAGE RankNTypes #-}
 module Text.HSmarty.Parser.Smarty where
 
-import Text.HSmarty.Types
 import Text.HSmarty.Parser.Util
+import Text.HSmarty.Types
 
+import Control.Applicative
 import Data.Attoparsec.Text
 import Data.Char
-import Control.Applicative
 
 import qualified Data.Aeson as A
 import qualified Data.Attoparsec.Expr as E
