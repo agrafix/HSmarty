@@ -1,9 +1,10 @@
 {-# OPTIONS_GHC -fwarn-unused-imports -fwarn-incomplete-patterns #-}
 {-# LANGUAGE OverloadedStrings #-}
+{-# LANGUAGE StrictData #-}
 module Text.HSmarty.Types where
 
-import qualified Data.Text as T
 import qualified Data.Aeson as A
+import qualified Data.Text as T
 
 data Smarty
    = Smarty
@@ -18,7 +19,11 @@ data SmartyStmt
    | SmartyComment T.Text
    | SmartyIf If
    | SmartyForeach Foreach
+   | SmartyCapture Capture
+   | SmartyLet Let
    | SmartyPrint Expr [ PrintDirective ]
+   | SmartyScope Scope
+   | SmartyFun FunctionDef
    deriving (Eq, Show)
 
 data Expr
@@ -58,6 +63,30 @@ data BinOp
    | BinMul Expr Expr
    | BinDiv Expr Expr
    deriving (Eq, Show)
+
+data Let
+    = Let
+    { l_name :: T.Text
+    , l_expr :: Expr
+    } deriving (Show, Eq)
+
+data Scope
+    = Scope
+    { s_stmts :: [SmartyStmt]
+    } deriving (Show, Eq)
+
+data Capture
+    = Capture
+    { c_name :: T.Text
+    , c_stmts :: [SmartyStmt]
+    } deriving (Show, Eq)
+
+data FunctionDef
+    = FunctionDef
+    { fd_name :: T.Text
+    , fd_defArgs :: [(T.Text, Expr)]
+    , fd_body :: [SmartyStmt]
+    } deriving (Show, Eq)
 
 data If
    = If

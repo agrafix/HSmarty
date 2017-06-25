@@ -10,8 +10,11 @@ module Text.HSmarty.Render.Engine
     )
 where
 
+import Control.Monad
+import Data.Monoid
 import Text.HSmarty.Parser.Smarty
 import Text.HSmarty.Types
+import qualified Data.Text.Lazy as TL
 
 import Control.Monad.Except
 import Control.Monad.Identity
@@ -28,6 +31,7 @@ import qualified Data.HashMap.Strict as HM
 import qualified Data.Text as T
 import qualified Data.Text.Encoding as T
 import qualified Data.Text.IO as T
+import qualified Data.Text.Lazy.Builder as TLB
 import qualified Data.Vector as V
 
 -- | An template param, construct using 'mkParam'
@@ -56,6 +60,7 @@ newtype SmartyCtx
 data Env =
     Env
     { e_var :: HM.HashMap T.Text TemplateVar
+    , e_fun :: HM.HashMap T.Text ([SmartyStmt], [(T.Text, A.Value)])
     , e_ctx :: SmartyCtx
     } deriving (Show, Eq)
 
@@ -71,6 +76,7 @@ mkEnv :: ParamMap -> SmartyCtx -> Env
 mkEnv pm ctx =
     Env
     { e_var = HM.map (\init' -> TemplateVar (unTemplateParam init') HM.empty) pm
+    , e_fun = HM.empty
     , e_ctx = ctx
     }
 
@@ -144,18 +150,39 @@ applyPrintDirective _ _ pd =
 
 evalTpl :: Monad m => Env -> Smarty -> EvalM m T.Text
 evalTpl env (Smarty _ tpl) =
-    evalBody env tpl
+    snd <$> seqStmts env tpl
 
-evalStmt :: Monad m => Env -> SmartyStmt -> EvalM m T.Text
-evalStmt _ (SmartyText t) = return t
-evalStmt _ (SmartyComment _) = return T.empty
+evalStmt :: Monad m => Env -> SmartyStmt -> EvalM m (Env, T.Text)
+evalStmt env (SmartyScope sc) =
+    do (_, body) <- seqStmts env (s_stmts sc)
+       pure (env, body)
+evalStmt env (SmartyFun fd) =
+    do args <-
+           forM (fd_defArgs fd) $ \(n, expr) ->
+           do r <- evalExpr env expr
+              pure (n, r)
+       let fun =
+               HM.insert (fd_name fd) (fd_body fd, args) (e_fun env)
+       pure (env { e_fun = fun }, T.empty)
+evalStmt env (SmartyCapture cap) =
+    do (_, body) <- seqStmts env (c_stmts cap)
+       let eVars =
+               HM.insert (c_name cap) (TemplateVar (A.String body) mempty) (e_var env)
+       pure (env { e_var = eVars }, T.empty)
+evalStmt env (SmartyLet l) =
+    do r <- evalExpr env (l_expr l)
+       let eVars =
+               HM.insert (l_name l) (TemplateVar r mempty) (e_var env)
+       pure (env { e_var = eVars }, T.empty)
+evalStmt env (SmartyText t) = return (env, t)
+evalStmt env (SmartyComment _) = return (env, T.empty)
 evalStmt env (SmartyPrint expr directives) =
     do e <- foldM (applyPrintDirective env) expr directives
-       exprToText env e
+       (,) <$> pure env <*> exprToText env e
 evalStmt env (SmartyIf (If cases elseBody)) =
     do evaledCases <- mapM (\(cond, body) ->
                                 do r <- evalExpr env cond
-                                   b <- evalBody env body
+                                   (_, b) <- seqStmts env body
                                    case r of
                                      (A.Bool False) ->
                                          return Nothing
@@ -166,28 +193,31 @@ evalStmt env (SmartyIf (If cases elseBody)) =
                            ) cases
        case catMaybes evaledCases of
          (x:_) ->
-             return x
+             return (env, x)
          _ ->
              case elseBody of
                Just elseB ->
-                   evalBody env elseB
+                   (,) <$> pure env <*> (snd <$> seqStmts env elseB)
                Nothing ->
-                   return T.empty
-
+                   return (env, T.empty)
 evalStmt env (SmartyForeach (Foreach source mKey val body elseBody)) =
     do evaledSource <- evalExpr env source
        (preparedSource, size) <- mkForeachInput evaledSource
        if size == 0
        then case elseBody of
-              Just b -> evalBody env b
-              Nothing -> return T.empty
+              Just b -> (,) <$> pure env <*> (snd <$> seqStmts env b)
+              Nothing -> return (env, T.empty)
        else do runs <- mapM (evalForeachBody env mKey val body) preparedSource
-               return $ T.concat runs
+               return (env, T.concat runs)
 
-evalBody :: Monad m => Env -> [SmartyStmt] -> EvalM m T.Text
-evalBody env stmt =
-    do b <- mapM (evalStmt env) stmt
-       return $ T.concat b
+seqStmts :: Monad m => Env -> [SmartyStmt] -> EvalM m (Env, T.Text)
+seqStmts env stmt =
+    do let go (ebase, tb) st =
+               do (e, t) <- evalStmt ebase st
+                  pure (e, tb <> TLB.fromText t)
+       (e', tb) <-
+           foldM go (env, mempty) stmt
+       return (e', TL.toStrict $ TLB.toLazyText tb)
 
 exprToText :: Monad m => Env -> Expr -> EvalM m T.Text
 exprToText env expr =
@@ -203,7 +233,11 @@ exprToText env expr =
          A.Array a ->
              return $ T.pack $ show a
 
-evalForeachBody :: Monad m => Env -> Maybe T.Text -> T.Text -> [ SmartyStmt ] -> ( A.Value, A.Value, PropMap ) -> EvalM m T.Text
+evalForeachBody ::
+    Monad m
+    => Env -> Maybe T.Text -> T.Text -> [ SmartyStmt ]
+    -> ( A.Value, A.Value, PropMap )
+    -> EvalM m T.Text
 evalForeachBody envFull mKey item body (keyVal, itemVal, props) =
     let env = e_var envFull
         env' = HM.insert item (TemplateVar itemVal props) env
@@ -211,7 +245,7 @@ evalForeachBody envFull mKey item body (keyVal, itemVal, props) =
             case mKey of
               Just key -> HM.insert key (TemplateVar keyVal HM.empty) env'
               Nothing -> env'
-    in evalBody (envFull { e_var = env'' }) body
+    in snd <$> seqStmts (envFull { e_var = env'' }) body
 
 
 mkForeachInput :: Monad m => A.Value -> EvalM m ( [ ( A.Value, A.Value, PropMap ) ], Int)
@@ -280,11 +314,25 @@ evalFunCall env "include" args =
                               ) evaledArgs
            asTplParams = HM.fromList $ map (\(k, v) -> (k, TemplateParam v)) otherArgs
        A.String <$> applyTemplate' (T.unpack filename) (e_ctx env) asTplParams
-evalFunCall _ fname _ =
-    throwError $ SmartyError $
-    T.concat [ "Call to undefined function "
-             , fname
-             ]
+evalFunCall env fname args =
+    case HM.lookup fname (e_fun env) of
+      Just (fBody, fDefArgs) ->
+          do localArgs <-
+                 forM args $ \(n, expr) ->
+                 do r <- evalExpr env expr
+                    pure (n, r)
+             let myArgs =
+                     fmap (\v -> TemplateVar v mempty) $
+                     HM.fromList localArgs `HM.union` HM.fromList fDefArgs
+                 callEnv =
+                     myArgs `HM.union` e_var env
+             (_, res) <- seqStmts (env { e_var = callEnv }) fBody
+             return (A.String res)
+      Nothing ->
+          throwError $ SmartyError $
+          T.concat [ "Call to undefined function "
+                   , fname
+                   ]
 
 
 evalExpr :: Monad m => Env -> Expr -> EvalM m A.Value

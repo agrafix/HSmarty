@@ -30,6 +30,14 @@ main =
 * Branching (eg. `{if ..}`, `{elseif ..}`, `{else}`, ..)
 * Looping with properties (eg. `{foreach $el as $k=>$v}`, `{$v@last}`, `{foreachelse}`, `{/foreach}`)
 * Including other templates (`{include file='other.tpl'}`)
+* Defining functions (`{function name='foo'}...{/function}`)
+* Calling functions (`{foo arg1="bar"}`)
+* Assigning variables (`{$foo=1+2+3}`)
+* Capturing output into variables (`{capture name='blabla'}<b>{$some}</b>{/capture}`)
+
+### Non-Smarty features
+
+* Explicit scoping blocks (`{scope}{$localFoo=123}{$localFoo}{/scope}{* $localFoo not available here! *}`)
 
 [1]: http://www.smarty.net/
 [2]: http://www.smarty.net/docs/en/language.basic.syntax.tpl

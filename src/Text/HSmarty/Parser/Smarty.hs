@@ -30,6 +30,9 @@ pStmt =
     SmartyText <$> pLiteral <|>
     SmartyIf <$> pIf <|>
     SmartyForeach <$> pForeach <|>
+    SmartyCapture <$> pCapture <|>
+    SmartyScope <$> pScope <|>
+    SmartyFun <$> pFunDef <|>
     braced (char '{') (char '}') (SmartyPrint <$> pExpr <*> many pPrintDirective) <|>
     SmartyText <$> (takeWhile1 (/='{'))
 
@@ -96,6 +99,33 @@ pOpenExpr t =
 pClose :: T.Text -> Parser T.Text
 pClose t =
     string $ T.concat [ "{/", t, "}" ]
+
+pLet :: Parser Let
+pLet =
+    Let
+    <$> (string "{$" *> pName <* char '=')
+    <*> pExpr <* char '}'
+
+pScope :: Parser Scope
+pScope =
+    Scope <$> (pOpen "scope" *> many pStmt <* pClose "scope")
+
+pCapture :: Parser Capture
+pCapture =
+    Capture
+    <$> ((string "{capture name=" *> space_) *> stringP <* char '}')
+    <*> (many pStmt <* pClose "capture")
+
+pFunDef :: Parser FunctionDef
+pFunDef =
+    FunctionDef
+    <$> ((string "{function name=" *> space_) *> stringP)
+    <*> (many pArg <* char '}')
+    <*> (many pStmt <* pClose "function")
+    where
+      pArg =
+          (,) <$> (space_ *> pName <* stripSpace (char '='))
+              <*> pExpr
 
 pIf :: Parser If
 pIf =
