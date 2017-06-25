@@ -1,8 +1,8 @@
 # HSmarty
 
-[![Build Status](https://travis-ci.org/agrafix/HSmarty.svg)](https://travis-ci.org/agrafix/HSmarty)
+[![CircleCI](https://circleci.com/gh/agrafix/HSmarty.svg?style=svg)](https://circleci.com/gh/agrafix/HSmarty)
 
-Haskell implementation of a (currently) very small subset of the [PHP-Smarty][1] template language.
+Haskell implementation of a subset of the [PHP-Smarty][1] template language.
 
 ## Usage
 ```haskell
@@ -38,6 +38,10 @@ main =
 ### Non-Smarty features
 
 * Explicit scoping blocks (`{scope}{$localFoo=123}{$localFoo}{/scope}{* $localFoo not available here! *}`)
+
+## Contributing
+
+All constributions adding features of the "original" PHP-Smarty V3 are welcome. For any other contributions please discuss in an issue first. Note that by sending a PR you agree that all your code can be released under the BSD3 license as part of this project or otherwise.
 
 [1]: http://www.smarty.net/
 [2]: http://www.smarty.net/docs/en/language.basic.syntax.tpl
