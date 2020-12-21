@@ -3,7 +3,7 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 module Text.HSmarty.Render.Engine
-    ( ParamMap
+    ( ParamMap, mkParam
     , SmartyCtx, SmartyError(..)
     , prepareTemplate, prepareTemplates
     , applyTemplate
@@ -44,6 +44,9 @@ data TemplateVar
 -- | Maps template variables to template params
 type ParamMap = HM.HashMap T.Text A.Value
 type PropMap = HM.HashMap T.Text A.Value
+
+mkParam :: A.ToJSON a => a -> A.Value
+mkParam = A.toJSON
 
 type EvalM m a = ExceptT SmartyError m a
 
