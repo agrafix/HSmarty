@@ -11,7 +11,7 @@ maintainer:          Alexander Thiemann <mail@athiemann.net>
 copyright:           (c) 2013 - 2020 by Alexander Thiemann
 category:            Text
 build-type:          Simple
-cabal-version:       >=1.8
+cabal-version:       >=1.10
 data-dir:            data
 data-files:          test.tpl
 tested-with:         GHC==8.8.4
@@ -24,6 +24,7 @@ Library
                      Text.HSmarty.Types
   other-modules:     Text.HSmarty.Render.Engine, Paths_HSmarty
   Ghc-Options:       -Wall
+  default-language:  Haskell2010
   build-depends:
                      HTTP,
                      aeson >=0.8,
@@ -45,6 +46,7 @@ Test-Suite TestHSmarty
   Type:              exitcode-stdio-1.0
   Main-Is:           Tests.hs
   Ghc-Options:       -Wall
+  default-language:  Haskell2010
   build-depends:
                      HSmarty,
                      HTF,
