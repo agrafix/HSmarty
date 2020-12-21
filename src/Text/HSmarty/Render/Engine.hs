@@ -3,10 +3,11 @@
 {-# LANGUAGE RankNTypes #-}
 {-# LANGUAGE DoAndIfThenElse #-}
 module Text.HSmarty.Render.Engine
-    ( TemplateParam, ParamMap
-    , mkParam
+    ( ParamMap
     , SmartyCtx, SmartyError(..)
-    , prepareTemplate, prepareTemplates, applyTemplate
+    , prepareTemplate, prepareTemplates
+    , applyTemplate
+    , applyTemplateFromJson
     )
 where
 
@@ -33,11 +34,6 @@ import qualified Data.Text.IO as T
 import qualified Data.Text.Lazy.Builder as TLB
 import qualified Data.Vector as V
 
--- | An template param, construct using 'mkParam'
-newtype TemplateParam
-      = TemplateParam { unTemplateParam :: A.Value }
-        deriving (Show, Eq)
-
 data TemplateVar
    = TemplateVar
    { tv_value :: A.Value
@@ -46,7 +42,7 @@ data TemplateVar
    deriving (Show, Eq)
 
 -- | Maps template variables to template params
-type ParamMap = HM.HashMap T.Text TemplateParam
+type ParamMap = HM.HashMap T.Text A.Value
 type PropMap = HM.HashMap T.Text A.Value
 
 type EvalM m a = ExceptT SmartyError m a
@@ -67,14 +63,10 @@ newtype SmartyError
     = SmartyError { unSmartyError :: T.Text }
       deriving (Show, Eq)
 
--- | Pack a value as a template param
-mkParam :: A.ToJSON a => a -> TemplateParam
-mkParam = TemplateParam . A.toJSON
-
 mkEnv :: ParamMap -> SmartyCtx -> Env
 mkEnv pm ctx =
     Env
-    { e_var = HM.map (\init' -> TemplateVar (unTemplateParam init') HM.empty) pm
+    { e_var = HM.map (\init' -> TemplateVar init' HM.empty) pm
     , e_fun = HM.empty
     , e_ctx = ctx
     }
@@ -98,6 +90,13 @@ prepareTemplates pat dir =
                          pure (HM.insert (dirDropper f) ct hm)
                  ) mempty files
        pure $ SmartyCtx ctx
+
+-- | Fill a template with values and print it as Text
+applyTemplateFromJson :: A.ToJSON a => FilePath -> SmartyCtx -> a -> Either SmartyError T.Text
+applyTemplateFromJson a b c =
+  case A.toJSON c of
+    A.Object hm -> runIdentity $ runExceptT $ applyTemplate' a b hm
+    x -> Left (SmartyError $ T.pack $ show x ++ " is not a json object, need an object at top level")
 
 -- | Fill a template with values and print it as Text
 applyTemplate :: FilePath -> SmartyCtx -> ParamMap -> Either SmartyError T.Text
@@ -311,7 +310,7 @@ evalFunCall env "include" args =
        let otherArgs = filter (\(k, _) ->
                                    not $ k `elem` [ "include" ]
                               ) evaledArgs
-           asTplParams = HM.fromList $ map (\(k, v) -> (k, TemplateParam v)) otherArgs
+           asTplParams = HM.fromList $ map (\(k, v) -> (k, v)) otherArgs
        A.String <$> applyTemplate' (T.unpack filename) (e_ctx env) asTplParams
 evalFunCall env fname args =
     case HM.lookup fname (e_fun env) of
