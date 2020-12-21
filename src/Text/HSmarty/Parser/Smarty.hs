@@ -13,7 +13,7 @@ import qualified Data.Aeson as A
 import qualified Data.Attoparsec.Expr as E
 import qualified Data.Text as T
 
-parseSmarty :: Monad m => FilePath -> T.Text -> m Smarty
+parseSmarty :: MonadFail m => FilePath -> T.Text -> m Smarty
 parseSmarty fp t =
     either fail mk $ parseOnly pRoot t
     where

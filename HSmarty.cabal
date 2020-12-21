@@ -1,5 +1,5 @@
 name:                HSmarty
-version:             0.3.0.0
+version:             0.4.0
 synopsis:            Small template engine
 description:         Haskell implementation of a subset of the PHP-Smarty template language
 Homepage:            https://github.com/agrafix/HSmarty
@@ -8,13 +8,13 @@ license:             BSD3
 license-file:        LICENSE
 author:              Alexander Thiemann <mail@athiemann.net>
 maintainer:          Alexander Thiemann <mail@athiemann.net>
-copyright:           (c) 2013 - 2017 by Alexander Thiemann
+copyright:           (c) 2013 - 2020 by Alexander Thiemann
 category:            Text
 build-type:          Simple
 cabal-version:       >=1.8
 data-dir:            data
 data-files:          test.tpl
-tested-with:         GHC==8.0.2, GHC==7.10.3
+tested-with:         GHC==8.8.4
 
 Library
   hs-source-dirs:    src
@@ -22,7 +22,7 @@ Library
                      Text.HSmarty.Parser.Smarty,
                      Text.HSmarty.Parser.Util,
                      Text.HSmarty.Types
-  other-modules:     Text.HSmarty.Render.Engine
+  other-modules:     Text.HSmarty.Render.Engine, Paths_HSmarty
   Ghc-Options:       -Wall
   build-depends:
                      HTTP,
@@ -41,7 +41,7 @@ Library
 
 Test-Suite TestHSmarty
   hs-source-dirs:    test
-  other-modules:     Text.HSmarty.Parser.SmartyTest
+  other-modules:     Text.HSmarty.Parser.SmartyTest, Paths_HSmarty
   Type:              exitcode-stdio-1.0
   Main-Is:           Tests.hs
   Ghc-Options:       -Wall

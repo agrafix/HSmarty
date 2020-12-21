@@ -11,7 +11,6 @@ module Text.HSmarty.Render.Engine
 where
 
 import Control.Monad
-import Data.Monoid
 import Text.HSmarty.Parser.Smarty
 import Text.HSmarty.Types
 import qualified Data.Text.Lazy as TL
