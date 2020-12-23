@@ -66,10 +66,28 @@ newtype SmartyError
     = SmartyError { unSmartyError :: T.Text }
       deriving (Show, Eq)
 
+wrapSmartyCapture :: A.Value -> PropMap -> TemplateVar
+wrapSmartyCapture x = TemplateVar (A.Object $ HM.singleton "capture" x)
+
+updateSmartyCapture :: T.Text -> A.Value -> HM.HashMap T.Text TemplateVar -> HM.HashMap T.Text TemplateVar
+updateSmartyCapture key value hm =
+    let updatedVal =
+            case HM.lookup "smarty" hm of
+                Nothing -> wrapSmartyCapture (A.Object $ HM.singleton key value) mempty
+                Just (TemplateVar existingCtx oldProps) -> 
+                    case existingCtx of
+                        A.Object oldContext -> 
+                            wrapSmartyCapture (A.Object $ HM.insert key value oldContext) oldProps
+                        _ -> error "Smarty capture context is always a map!"
+    in HM.insert "smarty" updatedVal hm
+
+rootMap :: HM.HashMap T.Text TemplateVar
+rootMap = HM.singleton "smarty" (wrapSmartyCapture (A.Object mempty) mempty)
+
 mkEnv :: ParamMap -> SmartyCtx -> Env
 mkEnv pm ctx =
     Env
-    { e_var = HM.map (\init' -> TemplateVar init' HM.empty) pm
+    { e_var = rootMap <> HM.map (\init' -> TemplateVar init' HM.empty) pm
     , e_fun = HM.empty
     , e_ctx = ctx
     }
@@ -167,8 +185,14 @@ evalStmt env (SmartyFun fd) =
        pure (env { e_fun = fun }, T.empty)
 evalStmt env (SmartyCapture cap) =
     do (_, body) <- seqStmts env (c_stmts cap)
-       let eVars =
-               HM.insert (c_name cap) (TemplateVar (A.String body) mempty) (e_var env)
+       let varBody = TemplateVar (A.String body) mempty
+           capture =
+               updateSmartyCapture (c_name cap) (A.String body)
+           assignment = 
+             case c_assign cap of
+                 Nothing -> mempty
+                 Just x -> HM.insert x varBody
+           eVars = capture . assignment $ e_var env
        pure (env { e_var = eVars }, T.empty)
 evalStmt env (SmartyLet l) =
     do r <- evalExpr env (l_expr l)

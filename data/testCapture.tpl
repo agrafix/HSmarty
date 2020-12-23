@@ -1,0 +1,1 @@
+{capture name='var' assign=var}Hello{/capture}{$var}/{$smarty.capture.var}

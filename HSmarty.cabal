@@ -1,5 +1,5 @@
 name:                HSmarty
-version:             0.4.0
+version:             0.4.1
 synopsis:            Small template engine
 description:         Haskell implementation of a subset of the PHP-Smarty template language
 Homepage:            https://github.com/agrafix/HSmarty
@@ -13,7 +13,9 @@ category:            Text
 build-type:          Simple
 cabal-version:       >=1.10
 data-dir:            data
-data-files:          test.tpl
+data-files:          test.tpl,
+                     testCapture.tpl,
+                     testCapture.txt
 tested-with:         GHC==8.8.4
 
 Library
@@ -42,7 +44,9 @@ Library
 
 Test-Suite TestHSmarty
   hs-source-dirs:    test
-  other-modules:     Text.HSmarty.Parser.SmartyTest, Paths_HSmarty
+  other-modules:     Text.HSmarty.Parser.SmartyTest, 
+                     Text.HSmarty.Render.EngineTest, 
+                     Paths_HSmarty
   Type:              exitcode-stdio-1.0
   Main-Is:           Tests.hs
   Ghc-Options:       -Wall

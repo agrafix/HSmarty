@@ -78,6 +78,7 @@ data Scope
 data Capture
     = Capture
     { c_name :: T.Text
+    , c_assign :: Maybe T.Text
     , c_stmts :: [SmartyStmt]
     } deriving (Show, Eq)
 

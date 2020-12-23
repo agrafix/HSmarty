@@ -48,6 +48,14 @@ test_varParser =
     do parserTest pVar "$hallo.sub@prop" (Variable "hallo" ["sub"] Nothing (Just "prop"))
        parserTest pVar "$hallo.foo_bar" (Variable "hallo" ["foo_bar"] Nothing Nothing)
 
+test_capture :: IO ()
+test_capture =
+    do parserTest pCapture "{capture name='foo'}Bye{/capture}" expect1
+       parserTest pCapture "{capture name='foo' assign=bar}Bye{/capture}" expect2
+    where
+      expect1 = Capture "foo" Nothing [SmartyText "Bye"]
+      expect2 = Capture "foo" (Just "bar") [SmartyText "Bye"]
+
 test_if :: IO ()
 test_if =
     do parserTest pIf "{if $var@last}Bye{/if}" expect

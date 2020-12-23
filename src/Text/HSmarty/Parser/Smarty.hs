@@ -22,7 +22,7 @@ parseSmarty fp t =
 
 pRoot :: Parser [SmartyStmt]
 pRoot =
-    (stripSpace $ many1 pStmt) <* endOfInput
+    stripSpace (many1 pStmt) <* endOfInput
 
 pStmt :: Parser SmartyStmt
 pStmt =
@@ -34,7 +34,7 @@ pStmt =
     SmartyScope <$> pScope <|>
     SmartyFun <$> pFunDef <|>
     braced (char '{') (char '}') (SmartyPrint <$> pExpr <*> many pPrintDirective) <|>
-    SmartyText <$> (takeWhile1 (/='{'))
+    SmartyText <$> takeWhile1 (/='{')
 
 pPrintDirective :: Parser PrintDirective
 pPrintDirective =
@@ -113,8 +113,9 @@ pScope =
 pCapture :: Parser Capture
 pCapture =
     Capture
-    <$> ((string "{capture name=" *> space_) *> stringP <* char '}')
-    <*> (many pStmt <* pClose "capture")
+    <$> ((string "{capture name=" *> optSpace_) *> stringP)
+    <*> optional (optSpace_ *> string "assign=" *> pName)
+    <*> (optSpace_ *> char '}' *> many pStmt <* pClose "capture")
 
 pFunDef :: Parser FunctionDef
 pFunDef =

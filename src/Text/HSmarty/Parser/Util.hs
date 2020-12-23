@@ -16,8 +16,8 @@ eolP =
 
 boolP :: Parser Bool
 boolP =
-    const True <$> string "true" <|>
-    const False <$> string "false"
+    True <$ string "true" <|>
+    False <$ string "false"
 
 stringP :: Parser T.Text
 stringP = (quotedString '"' <|> quotedString '\'') <?> "stringP"
@@ -51,11 +51,11 @@ escapeSeq = choice (zipWith decode "bnfrt\\\"'" "\b\n\f\r\t\\\"'")
     where decode c r = r <$ char c
 
 unicodeSeq :: Parser Char
-unicodeSeq = char 'u' *> (intToChar <$> decodeHexUnsafe <$> count 4 hexDigit)
+unicodeSeq = char 'u' *> (intToChar . decodeHexUnsafe <$> count 4 hexDigit)
     where intToChar = toEnum . fromIntegral
 
 decodeHexUnsafe :: String -> Integer
-decodeHexUnsafe hex = (head $ map fst $ readHex hex)
+decodeHexUnsafe hex = head $ map fst $ readHex hex
 
 hexDigitUpper :: Parser Char
 hexDigitUpper = satisfy (inClass "0-9A-F")
