@@ -1,7 +1,5 @@
 # HSmarty
 
-[![CircleCI](https://circleci.com/gh/agrafix/HSmarty.svg?style=svg)](https://circleci.com/gh/agrafix/HSmarty)
-
 Haskell implementation of a subset of the [PHP-Smarty][1] template language.
 
 ## Usage
