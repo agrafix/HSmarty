@@ -15,7 +15,7 @@ import qualified Data.Text as T
 
 parseSmarty :: MonadFail m => FilePath -> T.Text -> m Smarty
 parseSmarty fp t =
-    either fail mk $ parseOnly pRoot t
+    either (\err -> fail ("Failed to parse " <> fp <> ": " <> err)) mk $ parseOnly pRoot t
     where
       mk exprs =
           return $ Smarty fp exprs
