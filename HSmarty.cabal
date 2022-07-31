@@ -1,5 +1,5 @@
 name:                HSmarty
-version:             0.4.1
+version:             0.4.2
 synopsis:            Small template engine
 description:         Haskell implementation of a subset of the PHP-Smarty template language
 Homepage:            https://github.com/agrafix/HSmarty
@@ -8,7 +8,7 @@ license:             BSD3
 license-file:        LICENSE
 author:              Alexander Thiemann <mail@athiemann.net>
 maintainer:          Alexander Thiemann <mail@athiemann.net>
-copyright:           (c) 2013 - 2020 by Alexander Thiemann
+copyright:           (c) 2013 - 2022 by Alexander Thiemann
 category:            Text
 build-type:          Simple
 cabal-version:       >=1.10
